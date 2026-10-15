@@ -9,8 +9,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ProjectPython = Join-Path $ProjectRoot '.venv\Scripts\python.exe'
 $PythonCommand = Get-Command python -ErrorAction SilentlyContinue
-if ($PythonCommand) {
+if (Test-Path -LiteralPath $ProjectPython) {
+    $PythonExecutable = $ProjectPython
+} elseif ($PythonCommand) {
     $PythonExecutable = $PythonCommand.Source
 } else {
     $PythonExecutable = Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe'

@@ -1,4 +1,4 @@
-"""Local e-GP project dashboard prototype (Python standard library only)."""
+"""Local e-GP dashboard with SQLite or Supabase PostgreSQL storage."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from app.location import PROVINCES, UNKNOWN_PROVINCE, project_province_from_title
+from app.db import backend, connect_postgres
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -46,7 +47,9 @@ CSV_FIELDS = [
 ]
 
 
-def connect() -> sqlite3.Connection:
+def connect() -> sqlite3.Connection | object:
+    if backend() == "postgres":
+        return connect_postgres()
     DATA.mkdir(exist_ok=True)
     conn = sqlite3.connect(DB, timeout=10)
     conn.row_factory = sqlite3.Row
@@ -54,6 +57,10 @@ def connect() -> sqlite3.Connection:
 
 
 def init_db() -> None:
+    if backend() == "postgres":
+        from app.schema_postgres import init_db_postgres
+        init_db_postgres()
+        return
     with connect() as conn:
         conn.execute(
             """
@@ -261,9 +268,23 @@ def dashboard(params: dict[str, list[str]]) -> dict:
     where, values, selected_provinces = project_filter(params)
     with connect() as conn:
         rows = [dict(row) for row in conn.execute(
-            "SELECT * FROM projects" + where + " ORDER BY announced_at DESC, project_id DESC",
-            values,
-        ).fetchall()]
+            "SELECT * FROM projects" + where + " ORDER BY announced_at DESC, project_id DESC LIMIT ? OFFSET ?",
+            [*values, PAGE_SIZE, offset],
+        )]
+        totals = conn.execute(
+            "SELECT COUNT(*) AS count, COALESCE(SUM(budget), 0) AS budget_total, "
+            "COALESCE(SUM(CASE WHEN province = ? THEN 1 ELSE 0 END), 0) AS unknown_work_province_count, "
+            "COALESCE(SUM(CASE WHEN status = 'ประกาศใหม่' THEN 1 ELSE 0 END), 0) AS announced_count, "
+            "COALESCE(SUM(CASE WHEN status = 'ระหว่างประมูล' THEN 1 ELSE 0 END), 0) AS bidding_count, "
+            "COALESCE(SUM(CASE WHEN status IN ('ประกาศผู้ชนะ', 'ทำสัญญาแล้ว') THEN 1 ELSE 0 END), 0) AS winner_count, "
+            "COALESCE(SUM(CASE WHEN status IN ('ประกาศผู้ชนะ', 'ทำสัญญาแล้ว') AND winner = '' "
+            "THEN 1 ELSE 0 END), 0) AS excluded_winner_count "
+            "FROM projects" + where,
+            [UNKNOWN_PROVINCE, *values],
+        ).fetchone()
+        matching_provinces = {row["agency_province"] for row in conn.execute(
+            "SELECT DISTINCT agency_province FROM projects" + where, values
+        )}
         all_meta = conn.execute(
             "SELECT COUNT(*) AS total, SUM(is_demo) AS demo_count, MAX(updated_at) AS updated_at FROM projects"
         ).fetchone()
@@ -274,68 +295,62 @@ def dashboard(params: dict[str, list[str]]) -> dict:
             "SELECT service, fiscal_year, keyword, result_total, fetched_count, saved_count, skipped_count, synced_at "
             "FROM api_sync_runs ORDER BY id DESC LIMIT 1"
         ).fetchone()
-        province_counts = {row[0]: row[1] for row in conn.execute(
-            "SELECT agency_province, COUNT(*) FROM projects WHERE agency_province <> '' GROUP BY agency_province"
+        province_counts = {row["agency_province"]: row["count"] for row in conn.execute(
+            "SELECT agency_province, COUNT(*) AS count FROM projects WHERE agency_province <> '' GROUP BY agency_province"
         )}
         unknown_work_province_count = conn.execute(
-            "SELECT COUNT(*) FROM projects WHERE province = ?", (UNKNOWN_PROVINCE,)
-        ).fetchone()[0]
-        types = [row[0] for row in conn.execute("SELECT DISTINCT project_type FROM projects WHERE project_type <> '' ORDER BY project_type")]
-        statuses = [row[0] for row in conn.execute("SELECT DISTINCT status FROM projects ORDER BY status")]
-        api_count = conn.execute("SELECT COUNT(*) FROM projects WHERE source_kind='api'").fetchone()[0]
+            "SELECT COUNT(*) AS count FROM projects WHERE province = ?", (UNKNOWN_PROVINCE,)
+        ).fetchone()["count"]
+        types = [row["project_type"] for row in conn.execute("SELECT DISTINCT project_type FROM projects WHERE project_type <> '' ORDER BY project_type")]
+        statuses = [row["status"] for row in conn.execute("SELECT DISTINCT status FROM projects ORDER BY status")]
+        api_count = conn.execute("SELECT COUNT(*) AS count FROM projects WHERE source_kind='api'").fetchone()["count"]
+
+        award_condition = "status IN ('ประกาศผู้ชนะ', 'ทำสัญญาแล้ว') AND winner <> ''"
+        award_where = where + (" AND " if where else " WHERE ") + award_condition
+        real_count = conn.execute(
+            "SELECT COUNT(*) AS count FROM projects" + award_where + " AND is_demo = 0", values
+        ).fetchone()["count"]
+        demo_count = 0 if real_count else conn.execute(
+            "SELECT COUNT(*) AS count FROM projects" + award_where + " AND is_demo = 1", values
+        ).fetchone()["count"]
+        share_project_total = real_count or demo_count
+        share_where = award_where + " AND is_demo = ?"
+        share_values = [*values, 0 if real_count else 1]
+        share_winner_total = conn.execute(
+            "SELECT COUNT(DISTINCT winner) AS count FROM projects" + share_where, share_values
+        ).fetchone()["count"] if share_project_total else 0
+        shares = [dict(row) for row in conn.execute(
+            "SELECT winner, COUNT(*) AS count FROM projects" + share_where +
+            " GROUP BY winner ORDER BY count DESC, winner LIMIT 10", share_values
+        )] if share_project_total else []
 
     known_provinces = set(PROVINCES)
     province_options = list(PROVINCES)
     province_options.extend(sorted(p for p in province_counts if p not in known_provinces))
 
-    eligible = [
-        row for row in rows
-        if row["status"] in {"ประกาศผู้ชนะ", "ทำสัญญาแล้ว"}
-        and row["winner"]
-        and not row["is_demo"]
-    ]
-    # Demo data is deliberately excluded when real awarded projects exist.
-    demo_eligible = [
-        row for row in rows
-        if row["status"] in {"ประกาศผู้ชนะ", "ทำสัญญาแล้ว"}
-        and row["winner"]
-        and row["is_demo"]
-    ]
-    share_rows = eligible if eligible else demo_eligible
-    share_project_total = len(share_rows)
-    by_winner: dict[str, dict] = {}
-    for row in share_rows:
-        name = row["winner"].strip()
-        entry = by_winner.setdefault(name, {"winner": name, "count": 0})
-        entry["count"] += 1
-    shares = sorted(by_winner.values(), key=lambda item: (-item["count"], item["winner"]))
     for item in shares:
         item["percent"] = round(item["count"] / share_project_total * 100, 1) if share_project_total else 0
     return {
         "filters": {"provinces": selected_provinces},
-        "projects": rows[offset:offset + PAGE_SIZE],
+        "projects": rows,
         "pagination": {
             "offset": offset,
             "page_size": PAGE_SIZE,
-            "total": len(rows),
-            "has_more": offset + PAGE_SIZE < len(rows),
+            "total": totals["count"],
+            "has_more": offset + PAGE_SIZE < totals["count"],
         },
         "summary": {
-            "count": len(rows),
-            "budget_total": sum(row["budget"] or 0 for row in rows),
-            "province_count": len({row["agency_province"] for row in rows if row["agency_province"] in known_provinces}),
-            "unknown_work_province_count": sum(row["province"] == UNKNOWN_PROVINCE for row in rows),
-            "announced_count": sum(row["status"] == "ประกาศใหม่" for row in rows),
-            "bidding_count": sum(row["status"] == "ระหว่างประมูล" for row in rows),
-            "winner_count": sum(row["status"] in {"ประกาศผู้ชนะ", "ทำสัญญาแล้ว"} for row in rows),
+            "count": totals["count"],
+            "budget_total": totals["budget_total"],
+            "province_count": len(matching_provinces & known_provinces),
+            "unknown_work_province_count": totals["unknown_work_province_count"],
+            "announced_count": totals["announced_count"],
+            "bidding_count": totals["bidding_count"],
+            "winner_count": totals["winner_count"],
             "share_project_total": share_project_total,
-            "share_winner_total": len(shares),
-            "share_is_demo": not eligible and bool(demo_eligible),
-            "excluded_winner_count": sum(
-                row["status"] in {"ประกาศผู้ชนะ", "ทำสัญญาแล้ว"}
-                and not row["winner"]
-                for row in rows
-            ),
+            "share_winner_total": share_winner_total,
+            "share_is_demo": not real_count and bool(demo_count),
+            "excluded_winner_count": totals["excluded_winner_count"],
         },
         "shares": shares[:10],
         "meta": {
@@ -493,7 +508,7 @@ class Handler(BaseHTTPRequestHandler):
                     ids = list(seen_ids)
                     for offset in range(0, len(ids), 500):
                         chunk = ids[offset:offset + 500]
-                        existing.update(project_id for (project_id,) in conn.execute(
+                        existing.update(row["project_id"] for row in conn.execute(
                             f"SELECT project_id FROM projects WHERE project_id IN ({','.join('?' for _ in chunk)})",
                             chunk,
                         ))

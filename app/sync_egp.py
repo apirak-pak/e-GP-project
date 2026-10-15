@@ -165,7 +165,7 @@ def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
         sys.stderr.reconfigure(encoding="utf-8")
-    parser = argparse.ArgumentParser(description="ดึงโครงการ EGP-CONTRACT หนึ่งหน้าลงฐานข้อมูลในเครื่อง")
+    parser = argparse.ArgumentParser(description="ดึงโครงการ EGP-CONTRACT หนึ่งหน้าลงฐานข้อมูลที่ตั้งค่าไว้")
     parser.add_argument("--year", type=int, default=2568, help="ปีงบประมาณ พ.ศ. ที่ทำสัญญา")
     parser.add_argument("--keyword", default="จ้างก่อสร้าง", help="คำค้นชื่อโครงการ")
     parser.add_argument("--limit", type=int, default=20, help="จำนวนรายการที่ขอต่อครั้ง (จำนวนเต็มบวก; API อาจจำกัดเอง)")

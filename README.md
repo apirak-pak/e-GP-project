@@ -1,6 +1,6 @@
 # e-GP Project Radar — ต้นแบบบนเครื่อง
 
-เว็บ Dashboard สำหรับค้นหาโครงการตามจังหวัด ประเภทงาน สถานะ และช่วงราคา พร้อมฐานข้อมูล SQLite ในเครื่อง รองรับการดึงข้อมูลจริงจากบริการ EGP-CONTRACT ของ DGA แบบสั่งเองผ่าน PowerShell ข้อมูลตัวอย่างมีป้ายกำกับในหน้าเว็บ
+เว็บ Dashboard สำหรับค้นหาโครงการตามจังหวัด ประเภทงาน สถานะ และช่วงราคา เริ่มต้นด้วย SQLite ในเครื่อง และย้ายไปใช้ PostgreSQL ของ Supabase เป็นฐานข้อมูลหลักได้ รองรับการดึงข้อมูลจริงจากบริการ EGP-CONTRACT ของ DGA แบบสั่งเองผ่าน PowerShell ข้อมูลตัวอย่างมีป้ายกำกับในหน้าเว็บ
 
 คำอธิบายแหล่งข้อมูลอยู่ใน [DATA_SOURCES.md](docs/DATA_SOURCES.md) และผังโค้ดสำหรับคนรับงานต่ออยู่ใน [ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
@@ -32,7 +32,20 @@
 
 ## ฐานข้อมูลอยู่ที่ไหน
 
-โปรแกรมสร้าง `data/egp.db` อัตโนมัติเมื่อรันครั้งแรก ไฟล์นี้เก็บโครงการทั้งหมด หากต้องการสำรองข้อมูล ให้หยุดโปรแกรมแล้วคัดลอกไฟล์นี้ไว้ในที่ปลอดภัย โฟลเดอร์ `data/` ถูกกันออกจาก Git เพื่อไม่ให้ข้อมูลจริงติดไปกับโค้ด
+ค่าเริ่มต้นคือ SQLite ที่ `data/egp.db` หากต้องการสำรองข้อมูล ให้หยุดโปรแกรมแล้วคัดลอกไฟล์นี้ไว้ในที่ปลอดภัย โฟลเดอร์ `data/` ถูกกันออกจาก Git เพื่อไม่ให้ข้อมูลจริงติดไปกับโค้ด เมื่อย้ายไป Supabase แล้วไฟล์นี้ยังคงอยู่เป็นสำรอง แต่เว็บจะอ่านและบันทึกที่ Supabase เมื่อกำหนด `DB_BACKEND=postgres`
+
+## ย้ายฐานข้อมูลไป Supabase
+
+โปรเจ็คนี้ใช้ PostgreSQL ของ Supabase ผ่าน **Python ฝั่งเซิร์ฟเวอร์** ไม่ส่งรหัสผ่านฐานข้อมูลหรือ service role key ไปหน้าเว็บ สร้าง schema ชื่อ `egp` แยกจาก `public` และเก็บตาราง `projects`, `import_runs`, `api_sync_runs` ไว้ใน schema นี้
+
+1. ติดตั้งไลบรารีใน virtual environment: `python -m venv .venv` แล้ว `./.venv/Scripts/python.exe -m pip install -r requirements.txt` (ใน PowerShell ใช้ `& '.\.venv\Scripts\python.exe' -m pip install -r requirements.txt` ก็ได้) ไม่ต้องเปิดใช้งาน activate script
+2. ใน Supabase Dashboard ของโปรเจ็ค กด **Connect** → **Session pooler** → **View parameters** แล้วดู Host, Port และ User คัดลอกค่าจากหน้าจอนั้น อย่าเดาชื่อ host เอง
+3. เปิด `.env` บนเครื่อง แล้วเพิ่ม `SUPABASE_DB_HOST=...`, `SUPABASE_DB_PORT=5432`, `SUPABASE_DB_USER=...`, `SUPABASE_DB_PASSWORD=...` ตาม `.env.example` ใช้รหัสผ่านฐานข้อมูลของโปรเจ็ค Supabase ไม่ใช่รหัสผ่านที่ใช้ล็อกอินเว็บ อย่าส่ง `.env` หรือรหัสผ่านเข้าแชตหรือ Git ให้ `DB_BACKEND=sqlite` ไว้ก่อน
+4. หยุดการดึงข้อมูลใหม่ชั่วคราว แล้วรัน `& '.\.venv\Scripts\python.exe' -m app.migrate_to_supabase` จากโฟลเดอร์โปรเจ็ค โปรแกรมจะคัดลอกข้อมูลจาก SQLite ไป Supabase และตรวจจำนวนแถว ถ้าตารางปลายทางมีข้อมูลอยู่แล้ว โปรแกรมจะหยุดเพื่อไม่ทับข้อมูลเดิม
+5. เมื่อเห็นข้อความ **ย้ายข้อมูลเข้า Supabase สำเร็จ** ให้เปลี่ยน `.env` เป็น `DB_BACKEND=postgres` แล้วเริ่มเว็บใหม่ด้วย `& '.\.venv\Scripts\python.exe' -m app.server` หรือ `./run.ps1` คำสั่งดึง DGA ครั้งต่อไปจะบันทึกลง Supabase เช่นกัน
+6. ตรวจจำนวนโครงการบนหน้าเว็บและใน Supabase schema `egp` ก่อนใช้งานต่อ อย่าลบ `data/egp.db` จนกว่าจะตรวจครบ
+
+หากเครื่องเชื่อม Direct connection แบบ IPv6 ไม่ได้ ให้เลือก **Session pooler** ตามขั้นตอนข้างต้น ซึ่งใช้ IPv4 และ port 5432 การย้ายข้อมูลไม่ต้องใช้ `anon key` หรือ `service_role key` ของ Supabase
 
 ## นำเข้าข้อมูล CSV
 

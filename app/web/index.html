@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>e-GP Project Radar</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">e</span><span><strong>e-GP Radar</strong><small>Construction intelligence</small></span></div>
+      <div class="nav-title">WORKSPACE</div>
+      <a class="nav-link active" href="#dashboard">◫ <span>ภาพรวมโครงการ</span></a>
+      <a class="nav-link" href="#projects">▤ <span>รายการโครงการ</span></a>
+      <a class="nav-link" href="#market">◈ <span>ผู้ชนะและสัดส่วน</span></a>
+      <div class="sidebar-bottom">
+        <span class="local-dot"></span><span>ทำงานบนเครื่องนี้</span>
+        <small>ต้นแบบสำหรับทดลองใช้งาน</small>
+      </div>
+    </aside>
+
+    <main class="main" id="dashboard">
+      <header class="topbar">
+        <div class="breadcrumb">WORKSPACE <span>/</span> DASHBOARD</div>
+        <div class="top-actions">
+          <span id="lastUpdated" class="updated">ยังไม่มีข้อมูล</span>
+          <button class="button button-outline" id="importButton">นำเข้า CSV</button>
+          <button class="button button-primary" id="addButton">+ เพิ่มโครงการ</button>
+        </div>
+      </header>
+
+      <div class="content">
+        <div class="heading-row">
+          <div>
+            <div class="eyebrow">PUBLIC PROCUREMENT OVERVIEW</div>
+            <h1>ติดตามงานก่อสร้างภาครัฐ</h1>
+            <p class="subtitle">ค้นหาโครงการตามจังหวัดของหน่วยงานจัดซื้อ พื้นที่ก่อสร้างจริงอาจอยู่คนละจังหวัด</p>
+          </div>
+          <div class="heading-icon" aria-hidden="true">⌁</div>
+        </div>
+
+        <section class="notice" id="notice" role="status">
+          <div><strong>เริ่มต้นด้วยข้อมูลตัวอย่าง</strong><span>ข้อมูลจำลองเพื่อทดลองหน้าจอ ไม่มีโครงการจริงในระบบ</span></div>
+          <div class="notice-actions"><button class="button button-light" id="sampleButton">โหลดข้อมูลตัวอย่าง</button><button class="text-button" id="clearSampleButton" hidden>ลบตัวอย่าง</button></div>
+        </section>
+
+        <section class="filter-card" aria-label="ตัวกรองโครงการ">
+          <div class="section-header"><div><span class="section-kicker">FILTER PROJECTS</span><h2>ค้นหาโครงการ</h2></div><button class="text-button" id="resetFilters">ล้างตัวกรอง</button></div>
+          <form id="filters" class="filters-grid">
+            <label>ค้นหาคำสำคัญ<input id="q" name="q" type="search" placeholder="ชื่อโครงการ หน่วยงาน ผู้ชนะ..."></label>
+            <div class="province-filter">
+              <span class="filter-label">จังหวัดของหน่วยงานจัดซื้อ</span>
+              <details id="provincePicker" class="province-picker">
+                <summary id="provinceSummary">ทุกพื้นที่</summary>
+                <div class="province-menu">
+                  <input id="provinceSearch" type="search" aria-label="ค้นหาจังหวัด" placeholder="ค้นหาจังหวัด...">
+                  <button id="clearProvinces" class="text-button" type="button">ล้างจังหวัดที่เลือก</button>
+                  <div id="provinceOptions" class="province-options" role="group" aria-label="จังหวัดที่ต้องการดู"></div>
+                  <button class="button button-primary province-apply" type="submit">แสดงผลจังหวัดที่เลือก</button>
+                </div>
+              </details>
+              <small class="province-help">จังหวัดของหน่วยงานที่จัดซื้อ ไม่ใช่การยืนยันพื้นที่ก่อสร้าง</small>
+            </div>
+            <label>ประเภทงาน<select id="project_type" name="project_type"><option value="">ทุกประเภท</option></select></label>
+            <label>สถานะ<select id="status" name="status"><option value="">ทุกสถานะ</option></select></label>
+            <label>กรองตามราคา<select id="price_field" name="price_field"><option value="budget">วงเงินงบประมาณ</option><option value="reference_price">ราคากลาง</option><option value="winning_price">ราคาที่ชนะ</option></select></label>
+            <label>ราคาต่ำสุด (บาท)<input id="min_price" name="min_price" type="number" min="0" step="0.01" placeholder="ไม่กำหนด"></label>
+            <label>ราคาสูงสุด (บาท)<input id="max_price" name="max_price" type="number" min="0" step="0.01" placeholder="ไม่กำหนด"></label>
+            <button class="button button-primary filter-submit" type="submit">ค้นหาโครงการ →</button>
+          </form>
+        </section>
+
+        <section class="stats-grid" aria-label="ตัวเลขสรุป">
+          <div class="stat-card"><span class="stat-icon blue">▤</span><span class="stat-label">โครงการที่พบ</span><strong id="statCount">—</strong><small>ตามเงื่อนไขที่เลือก</small></div>
+          <div class="stat-card"><span class="stat-icon teal">◉</span><span class="stat-label">วงเงินงบประมาณรวม</span><strong id="statBudget">—</strong><small>เฉพาะรายการที่มีวงเงิน</small></div>
+          <div class="stat-card"><span class="stat-icon amber">⌁</span><span class="stat-label">จังหวัดหน่วยจัดซื้อในผลค้นหา</span><strong id="statProvinces">—</strong><small>ไม่นับพื้นที่ก่อสร้าง</small></div>
+          <div class="stat-card"><span class="stat-icon green">✓</span><span class="stat-label">มีผู้ชนะหรือสัญญา</span><strong id="statWinners">—</strong><small>ตามสถานะของรายการที่นำเข้า</small></div>
+        </section>
+
+        <div class="lower-grid">
+          <section class="panel projects-panel" id="projects">
+            <div class="section-header"><div><span class="section-kicker">PROJECT LIST</span><h2>รายการโครงการ <span id="tableCount" class="count-pill">0</span></h2></div><span class="table-hint">คลิกรายการเพื่อดูรายละเอียด</span></div>
+            <div class="table-wrap"><table><thead><tr><th>โครงการ</th><th>จังหวัดหน่วยจัดซื้อ / พื้นที่งาน</th><th>วงเงินงบประมาณ</th><th>สถานะ</th><th>ประกาศ</th></tr></thead><tbody id="projectRows"></tbody></table></div>
+            <div id="emptyState" class="empty-state" hidden><div class="empty-icon">▤</div><strong>ยังไม่พบโครงการในข้อมูลที่นำเข้า</strong><span id="emptyExplanation">ลองเปลี่ยนตัวกรอง หรือเพิ่มข้อมูลโครงการ</span></div>
+            <div class="list-footer"><span id="visibleCount">—</span><div class="page-controls"><button class="button button-outline" id="previousPage" type="button" aria-label="หน้าก่อน">‹</button><label for="projectPage">หน้า</label><input id="projectPage" type="number" min="1" value="1" aria-label="เลขหน้ารายการโครงการ"><span id="pageTotal">/ 1</span><button class="button button-outline" id="goToPage" type="button">ไป</button><button class="button button-outline" id="nextPage" type="button" aria-label="หน้าถัดไป">›</button></div></div>
+          </section>
+
+          <section class="panel market-panel" id="market">
+            <div class="section-header"><div><span class="section-kicker">AWARDED PROJECTS</span><h2>สัดส่วนจำนวนงานที่ชนะ</h2></div></div>
+            <p id="marketScope" class="market-scope">จังหวัดหน่วยจัดซื้อ: ทุกจังหวัด</p>
+            <p class="market-explain">จังหวัดที่เลือกคือที่ตั้งหน่วยงานจัดซื้อ โครงการอาจก่อสร้างในจังหวัดอื่น · คิดจากงานที่ประกาศผู้ชนะหรือทำสัญญาแล้วและระบุชื่อผู้ชนะ · คลิกชื่อผู้ชนะเพื่อดูงานและมูลค่า</p>
+            <div id="marketTotal" class="market-total">—</div>
+            <div id="marketRows" class="market-rows"></div>
+            <p id="marketNote" class="market-note"></p>
+          </section>
+        </div>
+
+        <footer>ตัวกรองใช้จังหวัดของหน่วยงานจัดซื้อ พื้นที่ก่อสร้างอาจต่างกัน · ข้อมูลที่นำเข้าเป็นเพียงบางส่วน โปรดตรวจประกาศต้นทางก่อนตัดสินใจ</footer>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="projectDialog" class="modal"><form id="projectForm" class="modal-form">
+    <div class="modal-heading"><div><span class="section-kicker">NEW PROJECT</span><h2>เพิ่มโครงการ</h2></div><button type="button" class="icon-button" data-close="projectDialog" aria-label="ปิด">×</button></div>
+    <p>กรอกข้อมูลจากประกาศจริง ช่องที่มี * จำเป็นต้องกรอก</p>
+    <div class="form-grid">
+      <label>รหัสโครงการ *<input name="project_id" required maxlength="80"></label>
+      <label>วันที่ประกาศ<input name="announced_at" type="date"></label>
+      <label class="wide">ชื่อโครงการ *<input name="title" required maxlength="500"></label>
+      <label>จังหวัดหน่วยจัดซื้อ *<select id="manualAgencyProvince" name="agency_province" required><option value="">เลือกจังหวัด</option></select></label>
+      <label>จังหวัดที่ตั้งงาน *<select id="manualProvince" name="province" required><option value="">เลือกจังหวัด</option></select></label>
+      <label>ประเภทงาน<input name="project_type" placeholder="เช่น ถนน อาคาร สะพาน"></label>
+      <label>หน่วยงาน<input name="agency"></label>
+      <label>สถานะ *<select name="status"><option>ประกาศใหม่</option><option>ระหว่างประมูล</option><option>ประกาศผู้ชนะ</option><option>ทำสัญญาแล้ว</option><option>ยกเลิก</option><option>ไม่ทราบสถานะ</option></select></label>
+      <label>วงเงินงบประมาณ (บาท)<input name="budget" type="number" min="0" step="0.01"></label>
+      <label>ราคากลาง (บาท)<input name="reference_price" type="number" min="0" step="0.01"></label>
+      <label>ราคาที่ชนะ (บาท)<input name="winning_price" type="number" min="0" step="0.01"></label>
+      <label>ชื่อผู้ชนะ<input name="winner"></label>
+      <label class="wide">ลิงก์ประกาศต้นทาง<input name="source_url" type="url" placeholder="https://..."></label>
+    </div>
+    <div class="modal-actions"><button type="button" class="button button-outline" data-close="projectDialog">ยกเลิก</button><button type="submit" class="button button-primary">บันทึกโครงการ</button></div>
+  </form></dialog>
+
+  <dialog id="importDialog" class="modal"><div class="modal-form">
+    <div class="modal-heading"><div><span class="section-kicker">IMPORT DATA</span><h2>นำเข้าไฟล์ CSV</h2></div><button type="button" class="icon-button" data-close="importDialog" aria-label="ปิด">×</button></div>
+    <p>ต้องมีคอลัมน์ <code>project_id, title, province, status</code> โดย <code>province</code> คือพื้นที่งาน เพิ่มคอลัมน์ <code>agency_province</code> เพื่อให้กรองตามจังหวัดหน่วยจัดซื้อได้ รหัสโครงการที่ซ้ำจะอัปเดตรายการเดิม</p>
+    <label class="file-drop">เลือกไฟล์ CSV (UTF-8)<input id="csvFile" type="file" accept=".csv,text/csv"></label>
+    <p class="small-help">ดูรูปแบบคอลัมน์ในไฟล์ <code>import_template.csv</code> ภายในโฟลเดอร์โปรเจ็ค</p>
+    <div class="modal-actions"><button type="button" class="button button-outline" data-close="importDialog">ยกเลิก</button><button id="importSubmit" type="button" class="button button-primary">นำเข้าข้อมูล</button></div>
+  </div></dialog>
+
+  <dialog id="detailDialog" class="modal"><div class="modal-form detail-form"><div class="modal-heading"><div><span class="section-kicker">PROJECT DETAIL</span><h2 id="detailTitle">รายละเอียดโครงการ</h2></div><button type="button" class="icon-button" data-close="detailDialog" aria-label="ปิด">×</button></div><div id="detailBody"></div></div></dialog>
+  <dialog id="winnerDialog" class="modal winner-modal"><div class="modal-form"><div class="modal-heading"><div><span class="section-kicker">AWARDED PROJECTS</span><h2 id="winnerTitle">โครงการที่ชนะ</h2></div><button type="button" class="icon-button" data-close="winnerDialog" aria-label="ปิด">×</button></div><p id="winnerScope" class="winner-scope"></p><div id="winnerSummary" class="winner-summary"></div><div id="winnerProjects" class="winner-projects"></div><div class="winner-footer"><span id="winnerPageLabel"></span><div class="page-controls"><button class="button button-outline" id="winnerPrevious" type="button">‹ ก่อนหน้า</button><button class="button button-outline" id="winnerNext" type="button">ถัดไป ›</button></div></div></div></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

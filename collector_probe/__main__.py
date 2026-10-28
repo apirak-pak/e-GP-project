@@ -25,7 +25,7 @@ from collector_probe.network import NetworkJournal
 
 ORIGIN = "https://process5.gprocurement.go.th"
 API_PATH = "/egp-oann10-service/pb/a-egp-allt-project/announcement"
-SEARCH_URL = ORIGIN + "/egp-agpc01-web/announcement?keywordSearch=&advancedSearch=true"
+SEARCH_URL = ORIGIN + "/egp-agpc01-web/announcement"
 CSV_URL = ORIGIN + API_PATH + "/csv"
 
 
@@ -167,6 +167,16 @@ async def browser_probe(url: str, output: Path) -> dict:
                 except BrowserTimeout:
                     result["outcome"] = "search_ui_unavailable"
                     return result
+                try:
+                    # The public page fetches its verification configuration after
+                    # rendering the form. Observe initialization, without changing it.
+                    await page.wait_for_function("""() => Boolean(
+                        document.querySelector('[name="cf-turnstile-response"]') ||
+                        document.querySelector('iframe[src*="challenges.cloudflare.com"]') ||
+                        document.getElementById('idcf-turnstile')?.children.length
+                    )""", timeout=15000)
+                except BrowserTimeout:
+                    pass
                 result["verification_widget_present"] = await page.locator('[name="cf-turnstile-response"]').count() > 0
                 if result["verification_widget_present"]:
                     try:
@@ -233,7 +243,8 @@ async def browser_probe(url: str, output: Path) -> dict:
                 await context.close()
                 await browser.close()
     except Exception as error:
-        result.update(outcome="browser_error", error_kind=type(error).__name__)
+        category = "ambiguous_ui_locator" if "strict mode violation" in str(error) else "other_browser_error"
+        result.update(outcome="browser_error", error_kind=type(error).__name__, error_category=category)
     return result
 
 

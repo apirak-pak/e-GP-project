@@ -48,7 +48,7 @@ jobs:
         env:
           PROBE_YEAR: ${{ inputs.year || '2569' }}
           PROBE_PROVINCE: ${{ inputs.province || '500000' }}
-        run: python -m collector_probe --browser --year "$PROBE_YEAR" --province "$PROBE_PROVINCE"
+        run: python -m collector_probe --browser --csv-project-id 69109071515 --year "$PROBE_YEAR" --province "$PROBE_PROVINCE"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

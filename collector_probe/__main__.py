@@ -7,18 +7,26 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
+import binascii
+import csv
+import io
+import os
 import json
 import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import Request, urlopen
+
+from collector_probe.network import NetworkJournal
 
 ORIGIN = "https://process5.gprocurement.go.th"
 API_PATH = "/egp-oann10-service/pb/a-egp-allt-project/announcement"
 SEARCH_URL = ORIGIN + "/egp-agpc01-web/announcement?keywordSearch=&advancedSearch=true"
+CSV_URL = ORIGIN + API_PATH + "/csv"
 
 
 def scope_url(year: int, province: str) -> str:
@@ -70,6 +78,49 @@ def decode_json(body: bytes | str) -> object:
         return None
 
 
+def classify_csv(status: int, payload: object) -> dict:
+    gate = classify(status, payload)
+    if gate["outcome"] != "unknown_schema":
+        return gate
+    data = payload.get("data")
+    if not isinstance(data, dict) or not isinstance(data.get("data"), str):
+        return {"http_status": status, "outcome": "unknown_csv_schema", "data_received": False}
+    try:
+        raw = base64.b64decode(data["data"], validate=True).decode("utf-8-sig")
+        rows = list(csv.reader(io.StringIO(raw)))
+        header_index = next(i for i, row in enumerate(rows) if "เลขที่โครงการ" in row and "สถานะโครงการ" in row)
+        header = rows[header_index]
+        projects = [row for row in rows[header_index + 1:] if any(value.strip() for value in row)]
+        index = header.index("เลขที่โครงการ")
+        if any(len(row) != len(header) or not re.fullmatch(r"\d{11}", row[index]) for row in projects):
+            raise ValueError("Invalid CSV project rows")
+        if data.get("size") != len(projects):
+            raise ValueError("CSV count does not match the envelope")
+    except (ValueError, UnicodeError, binascii.Error, StopIteration, csv.Error):
+        return {"http_status": status, "outcome": "invalid_csv", "data_received": False}
+    return {"http_status": status, "outcome": "csv_project_data" if projects else "empty_csv",
+            "data_received": bool(projects), "row_count": len(projects),
+            "at_export_cap": len(projects) >= 1000}
+
+
+def csv_probe(url: str, project_id: str) -> dict:
+    if not re.fullmatch(r"\d{11}", project_id):
+        raise ValueError("CSV probe requires one exact eleven-digit project ID")
+    params = {key: values[0] for key, values in parse_qs(urlsplit(url).query).items() if key != "page"}
+    params.update(announcementTodayFlag=False, keywordSearch=project_id)
+    request = Request(CSV_URL, data=json.dumps(params).encode(), method="POST",
+                      headers={"Content-Type": "application/json", "Accept": "application/json",
+                               "User-Agent": "egp-server-access-probe/0.1"})
+    try:
+        with urlopen(request, timeout=30) as response:
+            result = classify_csv(response.status, decode_json(response.read(5_000_000)))
+    except HTTPError as error:
+        result = classify_csv(error.code, decode_json(error.read(2_000_000)))
+    except (URLError, TimeoutError, OSError):
+        result = {"outcome": "network_error", "data_received": False}
+    return {**result, "exact_project_query": project_id}
+
+
 def direct_probe(url: str) -> dict:
     started = time.monotonic()
     request = Request(url, headers={"Accept": "application/json", "User-Agent": "egp-server-access-probe/0.1"})
@@ -96,17 +147,14 @@ async def browser_probe(url: str, output: Path) -> dict:
             browser = await runtime.chromium.launch(headless=True)
             context = await browser.new_context(locale="th-TH", timezone_id="Asia/Bangkok")
             page = await context.new_page()
-            failed_assets = []
+            journal = NetworkJournal()
             page_error_types = []
-
-            def failed(request):
-                parts = urlsplit(request.url)
-                if request.resource_type in ("script", "stylesheet", "document"):
-                    failed_assets.append({"host": parts.hostname, "path": parts.path,
-                                          "kind": request.resource_type, "failure": request.failure})
-
-            page.on("requestfailed", failed)
             page.on("pageerror", lambda error: page_error_types.append(error.name))
+            page.on("request", journal.request)
+            page.on("requestfinished", journal.finished)
+            page.on("requestfailed", journal.failed)
+            page.on("response", journal.response)
+            page.on("console", journal.console)
             try:
                 navigation = await page.goto(SEARCH_URL, wait_until="domcontentloaded", timeout=45000)
                 result["page_http_status"] = navigation.status if navigation else None
@@ -154,8 +202,9 @@ async def browser_probe(url: str, output: Path) -> dict:
                 except BrowserTimeout:
                     result["outcome"] = "search_or_response_timeout"
             finally:
-                result["failed_assets"] = failed_assets[:20]
+                result["failed_assets"] = journal.failures
                 result["page_error_types"] = page_error_types[:20]
+                result["network"] = journal.snapshot()
                 try:
                     result["ui"] = await page.evaluate("""() => ({
                         title:document.title, ready_state:document.readyState,
@@ -175,12 +224,13 @@ async def browser_probe(url: str, output: Path) -> dict:
     return result
 
 
-def verdict(direct: dict, browser: dict) -> str:
-    if direct.get("data_received") or browser.get("data_received"):
+def verdict(direct: dict, browser: dict, exported: dict | None = None) -> str:
+    results = (direct, browser, exported or {})
+    if any(result.get("data_received") for result in results):
         return "one_page_received_repeatability_not_yet_proven"
     if any(result.get("outcome") in ("verification_required", "announcement_session_required",
                                     "announcement_session_not_observed", "access_denied")
-           for result in (direct, browser)):
+           for result in results):
         return "unattended_access_not_proven_authentication_blocked"
     return "unattended_access_not_proven_inconclusive"
 
@@ -190,22 +240,37 @@ def main() -> None:
     parser.add_argument("--year", type=int, default=2569)
     parser.add_argument("--province", default="500000")
     parser.add_argument("--browser", action="store_true")
+    parser.add_argument("--csv-project-id", help="Test the official CSV endpoint for one exact project only")
     parser.add_argument("--output", type=Path, default=Path("artifacts/server-probe"))
     args = parser.parse_args()
     url = scope_url(args.year, args.province)
+    if args.csv_project_id and not re.fullmatch(r"\d{11}", args.csv_project_id):
+        parser.error("--csv-project-id must be eleven digits")
     args.output.mkdir(parents=True, exist_ok=True)
     direct = direct_probe(url)
-    if args.browser and direct.get("http_status") != 429:
+    exported = (csv_probe(url, args.csv_project_id) if args.csv_project_id and direct.get("http_status") != 429
+                else {"outcome": "not_requested_or_rate_limited", "data_received": False})
+    limited = any(result.get("http_status") == 429 for result in (direct, exported))
+    if args.browser and not limited:
         browser = asyncio.run(browser_probe(url, args.output))
     else:
-        browser = {"outcome": "skipped_rate_limit" if direct.get("http_status") == 429 else "not_requested",
+        browser = {"outcome": "skipped_rate_limit" if limited else "not_requested",
                    "data_received": False}
     report = {"observed_at": datetime.now(timezone.utc).isoformat(),
               "scope": {"fiscal_year": args.year, "province_code": args.province,
                         "method_id": "16", "type_id": "02", "page": 1},
-              "direct": direct, "browser": browser, "verdict": verdict(direct, browser),
+              "direct": direct, "csv_export": exported, "browser": browser,
+              "verdict": verdict(direct, browser, exported),
               "production_ready": False}
     (args.output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    if os.environ.get("GITHUB_STEP_SUMMARY"):
+        summary = ["## e-GP access result", "", "Diagnostics completed; production access is not proven.",
+                   "", "| Route | Outcome | Real project data |", "| --- | --- | --- |"]
+        for name, result in (("Direct API", direct), ("Official CSV", exported), ("Clean browser", browser)):
+            summary.append(f"| {name} | {result['outcome']} | {result.get('data_received', False)} |")
+        summary.extend(["", "Production ready: **false**", "", "Verdict: `" + report["verdict"] + "`"])
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as stream:
+            stream.write("\n".join(summary) + "\n")
     print(json.dumps(report, ensure_ascii=False, indent=2))
 
 

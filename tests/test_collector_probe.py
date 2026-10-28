@@ -1,8 +1,10 @@
 import json
+import base64
 import unittest
 from urllib.parse import parse_qs, urlsplit
 
-from collector_probe.__main__ import classify, scope_url, verdict
+from collector_probe.__main__ import classify, classify_csv, scope_url, verdict
+from collector_probe.network import NetworkJournal, public_address
 
 
 class CloudProbeTests(unittest.TestCase):
@@ -31,3 +33,37 @@ class CloudProbeTests(unittest.TestCase):
         self.assertEqual(parse_qs(url.query)["page"], ["1"])
         with self.assertRaises(ValueError):
             scope_url(2570, "500000&token=secret")
+
+    def test_csv_requires_real_records_and_matching_declared_size(self):
+        text = '\ufeffข้อมูลโครงการ\nเลขที่โครงการ,สถานะโครงการ\n69100000001,เชิญชวน\n'
+        payload = {"data": {"data": base64.b64encode(text.encode()).decode(), "size": 1}}
+        result = classify_csv(200, payload)
+        self.assertEqual(result["outcome"], "csv_project_data")
+        self.assertEqual(result["row_count"], 1)
+        self.assertNotIn("69100000001", json.dumps(result))
+        payload["data"]["size"] = 1000
+        self.assertFalse(classify_csv(200, payload)["data_received"])
+
+    def test_csv_verification_failure_and_invalid_base64_never_pass(self):
+        self.assertEqual(classify_csv(200, {"validateCfTurnTile": False})["outcome"], "verification_required")
+        self.assertFalse(classify_csv(200, {"data": {"data": "not-base64", "size": 1}})["data_received"])
+
+    def test_network_diagnostics_omit_query_and_dynamic_token_paths(self):
+        address = public_address("https://process5.gprocurement.go.th/egp-api/validate/PRIVATE_SECRET?token=MORE_SECRET")
+        self.assertNotIn("SECRET", json.dumps(address))
+        self.assertEqual(public_address("https://process5.gprocurement.go.th/egp-agpc01-web/main.abc.js?token=SECRET")["path"],
+                         "/egp-agpc01-web/main.abc.js")
+
+    def test_network_journal_tracks_stuck_requests_without_preserving_headers(self):
+        class Request:
+            url = "https://process5.gprocurement.go.th/egp-agpc01-web/chunk.abc.js"
+            resource_type = "script"
+            failure = None
+            headers = {"secret": "DO_NOT_REPORT"}
+        journal = NetworkJournal()
+        request = Request()
+        journal.request(request)
+        self.assertEqual(len(journal.snapshot()["pending"]), 1)
+        self.assertNotIn("DO_NOT_REPORT", json.dumps(journal.snapshot()))
+        journal.finished(request)
+        self.assertEqual(journal.snapshot()["pending"], [])

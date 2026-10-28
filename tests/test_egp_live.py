@@ -20,6 +20,7 @@ ROW = {"projectId": "69109071515", "projectName": "ประกวดราค�
 
 class EgpLiveTests(unittest.TestCase):
     def setUp(self):
+        (server.ROOT / "data").mkdir(exist_ok=True)
         self.temp = tempfile.TemporaryDirectory(dir=server.ROOT / "data")
         self.db = Path(self.temp.name) / "egp_live.db"
         self.patch = patch.object(server, "DB", self.db)

@@ -1,0 +1,58 @@
+name: Server access proof
+
+on:
+  push:
+    branches: [codex/server-ingestion-probe]
+    paths: ['collector_probe/**', 'tests/**', '.github/workflows/server-probe.yml', 'requirements-probe.txt']
+  workflow_dispatch:
+    inputs:
+      year:
+        description: Buddhist fiscal year
+        default: '2569'
+        required: true
+      province:
+        description: Six-digit e-GP province code
+        default: '500000'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m unittest discover -s tests -v
+      - run: node --test tests/test_egp_live_extension.cjs
+
+  cloud-access:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r requirements-probe.txt
+      - run: python -m playwright install --with-deps chromium
+      - name: Probe one page from a clean cloud browser
+        env:
+          PROBE_YEAR: ${{ inputs.year || '2569' }}
+          PROBE_PROVINCE: ${{ inputs.province || '500000' }}
+        run: python -m collector_probe --browser --year "$PROBE_YEAR" --province "$PROBE_PROVINCE"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: egp-server-access-report
+          path: artifacts/server-probe/
+          retention-days: 7
+          if-no-files-found: warn

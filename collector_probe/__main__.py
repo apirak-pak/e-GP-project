@@ -96,12 +96,23 @@ async def browser_probe(url: str, output: Path) -> dict:
             browser = await runtime.chromium.launch(headless=True)
             context = await browser.new_context(locale="th-TH", timezone_id="Asia/Bangkok")
             page = await context.new_page()
+            failed_assets = []
+            page_error_types = []
+
+            def failed(request):
+                parts = urlsplit(request.url)
+                if request.resource_type in ("script", "stylesheet", "document"):
+                    failed_assets.append({"host": parts.hostname, "path": parts.path,
+                                          "kind": request.resource_type, "failure": request.failure})
+
+            page.on("requestfailed", failed)
+            page.on("pageerror", lambda error: page_error_types.append(error.name))
             try:
                 navigation = await page.goto(SEARCH_URL, wait_until="domcontentloaded", timeout=45000)
                 result["page_http_status"] = navigation.status if navigation else None
                 search = page.get_by_role("button", name="ค้นหา", exact=True)
                 try:
-                    await search.wait_for(state="visible", timeout=20000)
+                    await search.wait_for(state="visible", timeout=45000)
                 except BrowserTimeout:
                     result["outcome"] = "search_ui_unavailable"
                     return result
@@ -143,6 +154,16 @@ async def browser_probe(url: str, output: Path) -> dict:
                 except BrowserTimeout:
                     result["outcome"] = "search_or_response_timeout"
             finally:
+                result["failed_assets"] = failed_assets[:20]
+                result["page_error_types"] = page_error_types[:20]
+                try:
+                    result["ui"] = await page.evaluate("""() => ({
+                        title:document.title, ready_state:document.readyState,
+                        body_text_length:document.body?.innerText.length || 0,
+                        script_count:document.scripts.length
+                    })""")
+                except Exception:
+                    pass
                 try:
                     await page.screenshot(path=str(output / "browser-page.png"), timeout=5000)
                 except Exception:

@@ -159,11 +159,24 @@ async def browser_probe(url: str, output: Path) -> dict:
                 navigation = await page.goto(SEARCH_URL, wait_until="domcontentloaded", timeout=45000)
                 result["page_http_status"] = navigation.status if navigation else None
                 search = page.get_by_role("button", name="ค้นหา", exact=True)
+                result["ui_wait_limit_seconds"] = 180
                 try:
-                    await search.wait_for(state="visible", timeout=45000)
+                    # e-GP loads a shell and shared chunks before the announcement
+                    # module. A 45-second budget expired just after that module began.
+                    await search.wait_for(state="visible", timeout=180000)
                 except BrowserTimeout:
                     result["outcome"] = "search_ui_unavailable"
                     return result
+                result["verification_widget_present"] = await page.locator('[name="cf-turnstile-response"]').count() > 0
+                if result["verification_widget_present"]:
+                    try:
+                        # Observe completion by the website itself; never click,
+                        # reset, solve, inject or manufacture a challenge response.
+                        await page.wait_for_function("""() => Boolean(document.querySelector(
+                            '[name="cf-turnstile-response"]')?.value)""", timeout=30000)
+                    except BrowserTimeout:
+                        result["outcome"] = "verification_required"
+                        return result
                 # One ordinary Search click. No interaction with CAPTCHA/challenge widgets.
                 result["bootstrap_attempted"] = True
                 try:

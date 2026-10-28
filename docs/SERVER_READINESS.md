@@ -2,6 +2,8 @@
 
 เป้าหมาย production คือปิดเครื่องผู้ใช้แล้วเว็บและงานอัปเดตยังทำงานได้ ตัวรับข้อมูลต้องรันบนเซิร์ฟเวอร์ ฐานหลักเป็น PostgreSQL บน Supabase และเว็บอยู่ Vercel SQLite/ส่วนขยาย Edge เดิมเป็นเครื่องมือพัฒนาและข้อมูลอ้างอิง ไม่เป็นเงื่อนไขของ production
 
+ผู้ใช้ยืนยันเพิ่มเติมวันที่ 29 ตุลาคม 2569 ว่าต้องอัตโนมัติทั้งหมด ไม่ยอมรับการให้ผู้ดูแลเข้ามายืนยัน CAPTCHA/ตัวตนเป็นครั้งคราว แม้จะทำผ่านเบราว์เซอร์บนเซิร์ฟเวอร์ก็ตาม ดังนั้น remote-browser handoff ไม่ใช่เกณฑ์ผ่านของโปรเจกต์ ต้องพิสูจน์ช่องทางที่ทำงานได้เองตามเงื่อนไขของต้นทาง โดยไม่แก้หรือข้ามการตรวจตัวตน
+
 ## จุดย้อนกลับ
 
 Branch `codex/server-ingestion-probe` เริ่มด้วย commit `f5de6de` เก็บแดชบอร์ดที่ใช้อยู่และการย้ายโปรแกรมเดิมเข้า `unused/` โดยไม่ส่งฐานข้อมูลจริง `.env` หรือเซสชันขึ้น GitHub ไม่เปลี่ยน `main`
@@ -11,7 +13,7 @@ Branch `codex/server-ingestion-probe` เริ่มด้วย commit `f5de6d
 Workflow **Server access proof** ใช้ Ubuntu runner ชั่วคราวของ GitHub ทดสอบโค้ดก่อน แล้วทดลอง:
 
 1. Python เรียก API รายการประกาศหนึ่งหน้า โดยไม่มี cookie หรือ token จากเครื่องผู้ใช้
-2. เปิดหน้าค้นหา e-GP ด้วย Chromium ปกติในเซสชันใหม่ กดค้นหาเพียงครั้งเดียวเมื่อมีปุ่ม ไม่แก้หรือกดตัวตรวจ CAPTCHA
+2. เปิดหน้าค้นหา e-GP ด้วย Chromium ปกติในเซสชันใหม่ รอโมดูลประกาศและการเริ่มตัวตรวจ หากเว็บไซต์ยืนยันสำเร็จเองหรือไม่ต้องยืนยัน จึงกดค้นหาเพียงครั้งเดียว ไม่แก้หรือกดตัวตรวจ CAPTCHA
 3. ถ้าคำขอค้นหาของเว็บไซต์สำเร็จและมี session header ที่เว็บสร้างเอง จึงเรียก API อีกหนึ่งหน้าตามจังหวัด/ปีที่กำหนด ใช้ header เฉพาะในหน่วยความจำ
 
 ไม่มีการลองซ้ำเมื่อถูกจำกัดคำขอ ไม่มี stealth browser ไม่มีการสร้างหรือย้าย token จากเครื่องผู้ใช้ ไม่ดาวน์โหลดข้อมูลจำนวนมาก ไม่เขียนฐานปัจจุบัน ไม่ใส่ Supabase credentials ใน workflow
@@ -34,6 +36,7 @@ Actions เป็นเครื่องทดลอง ไม่ใช่ค�
 python -m unittest discover -s tests -v
 node --test tests/test_egp_live_extension.cjs
 python -m collector_probe --year 2569 --province 500000
+python -m collector_probe --browser --csv-project-id 69109071515 --year 2569 --province 500000
 ```
 
 โหมด browser ต้องติดตั้ง `requirements-probe.txt` และ Chromium ของ Playwright ก่อน แล้วเพิ่ม `--browser` ไฟล์ผลลัพธ์อยู่ `artifacts/server-probe/` ซึ่ง Git ไม่เก็บ
@@ -57,3 +60,24 @@ python -m collector_probe --year 2569 --province 500000
 ข้อสรุปจำกัดเฉพาะ GitHub-hosted Ubuntu runner ที่ทดลอง: direct API ยังไม่ผ่านการยืนยัน และ browser bootstrap ยังไม่สำเร็จ ไม่ได้พิสูจน์ว่าทุกเซิร์ฟเวอร์จะเข้าไม่ได้ และไม่ได้พิสูจน์ว่า browser ถูกปฏิเสธด้วยสาเหตุเดียวกับ API ยังไม่มีข้อมูลเข้าฐานจากคลาวด์ ไม่มีการแก้ฐานเดิมหรือใช้โครงการ Supabase ในการทดลองนี้
 
 งานเข้าถึงต้นทางที่ยังต้องทำคือวินิจฉัยการเริ่มทำงานของหน้าเว็บ/คำขอที่ค้างบน cloud browser และตรวจช่องทาง export CSV ทางการ ก่อนเลือกรูปแบบ worker ถาวรหรือรับรองการดึงแบบอัตโนมัติ
+
+## ผลติดตาม: ฟอร์มโหลดครบแล้ว แต่ยังต้องยืนยันตัวตน
+
+ตรวจ public bootstrap และเพิ่ม network journal พบว่ารอบรอ 45 วินาทีหมดเวลาก่อนโมดูลประกาศโหลดเสร็จ จึงขยายการรอฟอร์มเป็น 180 วินาที และเปลี่ยนจาก URL ที่เปิด modal ค้นหาขั้นสูงมาเป็นหน้าค้นหาปกติ เพื่อตัดปัญหาปุ่มค้นหาซ้ำในตัวทดลอง
+
+ผล [รอบยืนยันด้วยหน้าปกติ](https://github.com/apirak-pak/e-GP-project/actions/runs/40781022782):
+
+- HTML, JavaScript และโมดูลประกาศโหลดได้ ฟอร์มแสดงครบ document readyState เป็น complete
+- Turnstile แสดงช่องให้ยืนยันว่าเป็นมนุษย์ และไม่มี token ที่เว็บไซต์ออกให้เองภายในช่วงสังเกต จึงไม่ได้ส่งคำขอค้นหาจากเบราว์เซอร์
+- API รายการ GET หนึ่งหน้า และ CSV POST ที่จำกัดเลขโครงการเดียว ต่างตอบ HTTP 200 พร้อม validateCfTurnTile=false
+- ไม่ได้รับข้อมูลโครงการจากทั้งสามวิธี เกณฑ์อัตโนมัติทั้งหมดจึงยังไม่ผ่าน
+- Python 14 กรณีและ JavaScript 8 กรณีผ่านในเครื่องและ cloud CI
+
+พบ endpoint CSV จริงและรูปแบบคำตอบแล้ว ดู [การตรวจโค้ด export](EGP_EXPORT_RESEARCH.md) และ [หลักฐานสรุปเพิ่มเติม](evidence/cloud-access-followup-2026-10-29.json)
+
+ไม่ใช้ HTTP 401 ของ PAT หรือ DNS failure บาง subdomain ของ Cloudflare เป็นข้อสรุปว่าการตรวจล้มเหลว เพราะ Cloudflare ระบุว่าเหตุการณ์เหล่านี้อาจเป็นส่วนปกติของการตรวจ เกณฑ์คือ token/ข้อมูลจริงที่เว็บไซต์ส่งให้และสถานะ UI:
+
+- [Cloudflare challenge solve issues](https://developers.cloudflare.com/cloudflare-challenges/troubleshooting/challenge-solve-issues/)
+- [Cloudflare automated testing guidance](https://developers.cloudflare.com/turnstile/troubleshooting/testing/)
+
+ข้อจำกัดนี้วัดบน GitHub-hosted runner ไม่ใช่ข้อพิสูจน์ว่าเซิร์ฟเวอร์ทุกแห่งเข้าไม่ได้ แต่ยังไม่มีฐานให้รับรองงาน production แบบไม่ต้องใช้คน ช่องทางที่ควรยืนยันถัดไปคือ API/การส่งออกสำหรับระบบที่เจ้าของข้อมูลรองรับ ดู [คำถามสำหรับยืนยันช่องทางอัตโนมัติ](EGP_MACHINE_ACCESS.md)

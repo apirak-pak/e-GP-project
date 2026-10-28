@@ -12,7 +12,8 @@ from urllib.parse import urlencode
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from app.location import UNKNOWN_PROVINCE, project_province_from_title
-from app.server import DATA, ROOT, UPSERT_SQL, connect, init_db, validate_project
+from app.db import backend
+from app.server import DATA, DB, ROOT, UPSERT_SQL, connect, init_db, validate_project
 
 
 ENDPOINT = "https://opend.data.go.th/govspending/service/egp-contract"
@@ -179,6 +180,9 @@ def main() -> int:
         parser.error("ช่วงราคาต้องไม่ติดลบ")
     if args.min_budget is not None and args.max_budget is not None and args.min_budget > args.max_budget:
         parser.error("ราคาต่ำสุดต้องไม่มากกว่าราคาสูงสุด")
+    if backend() == "sqlite" and DB.name == "dga_explore.db":
+        print("ฐาน DGA ใหม่เก็บคำตอบดิบเท่านั้น: ใช้ python -m app.capture_dga; ไม่แปลงข้อมูลเข้า projects", file=sys.stderr)
+        return 1
     try:
         payload, http_status, quota, body_bytes = fetch(read_key(), args)
         rows = []

@@ -15,13 +15,13 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from app.location import PROVINCES, UNKNOWN_PROVINCE, project_province_from_title
-from app.db import backend, connect_postgres
+from app.db import backend, connect_postgres, setting
 
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = Path(__file__).resolve().parent / "web"
 DATA = ROOT / "data"
-DB = DATA / "egp.db"
+DB = DATA / Path(setting("SQLITE_DB_FILE") or "egp.db").name
 HOST = "127.0.0.1"  # Local prototype: do not expose to a network without authentication.
 PORT = 8501
 PAGE_SIZE = 50
@@ -266,6 +266,7 @@ def project_filter(params: dict[str, list[str]]) -> tuple[str, list[object], lis
 def dashboard(params: dict[str, list[str]]) -> dict:
     offset = page_offset(params)
     where, values, selected_provinces = project_filter(params)
+    raw_mode = backend() == "sqlite" and DB.name == "dga_explore.db"
     with connect() as conn:
         rows = [dict(row) for row in conn.execute(
             "SELECT * FROM projects" + where + " ORDER BY announced_at DESC, project_id DESC LIMIT ? OFFSET ?",
@@ -304,6 +305,10 @@ def dashboard(params: dict[str, list[str]]) -> dict:
         types = [row["project_type"] for row in conn.execute("SELECT DISTINCT project_type FROM projects WHERE project_type <> '' ORDER BY project_type")]
         statuses = [row["status"] for row in conn.execute("SELECT DISTINCT status FROM projects ORDER BY status")]
         api_count = conn.execute("SELECT COUNT(*) AS count FROM projects WHERE source_kind='api'").fetchone()["count"]
+        raw_captures = raw_projects = 0
+        if raw_mode and conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='dga_raw_captures'").fetchone():
+            raw_captures = conn.execute("SELECT COUNT(*) FROM dga_raw_captures").fetchone()[0]
+            raw_projects = conn.execute("SELECT COUNT(*) FROM dga_raw_projects").fetchone()[0]
 
         award_condition = "status IN ('ประกาศผู้ชนะ', 'ทำสัญญาแล้ว') AND winner <> ''"
         award_where = where + (" AND " if where else " WHERE ") + award_condition
@@ -354,6 +359,9 @@ def dashboard(params: dict[str, list[str]]) -> dict:
         },
         "shares": shares[:10],
         "meta": {
+            "raw_mode": raw_mode,
+            "raw_captures": raw_captures,
+            "raw_projects": raw_projects,
             "total_in_database": all_meta["total"],
             "demo_count": all_meta["demo_count"] or 0,
             "updated_at": all_meta["updated_at"],
@@ -465,6 +473,9 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path not in {"/api/projects", "/api/import", "/api/demo/load", "/api/demo/clear"}:
             self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        if backend() == "sqlite" and DB.name == "dga_explore.db":
+            self.send_json({"error": "ฐาน DGA ใหม่เก็บคำตอบดิบเพื่อเลือกฟิลด์ก่อน ยังไม่เปิดให้นำเข้าโครงการที่แปลงแล้ว"}, HTTPStatus.CONFLICT)
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))

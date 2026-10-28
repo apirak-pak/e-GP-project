@@ -9,21 +9,19 @@
 </head>
 <body>
   <div class="app-shell">
-    <aside class="sidebar">
+    <header class="sidebar">
       <div class="brand"><span class="brand-mark">e</span><span><strong>e-GP Radar</strong><small>Construction intelligence</small></span></div>
-      <div class="nav-title">WORKSPACE</div>
-      <a class="nav-link active" href="#dashboard">◫ <span>ภาพรวมโครงการ</span></a>
-      <a class="nav-link" href="#projects">▤ <span>รายการโครงการ</span></a>
-      <a class="nav-link" href="#market">◈ <span>ผู้ชนะและสัดส่วน</span></a>
-      <div class="sidebar-bottom">
-        <span class="local-dot"></span><span>ทำงานบนเครื่องนี้</span>
-        <small>ต้นแบบสำหรับทดลองใช้งาน</small>
-      </div>
-    </aside>
+      <nav class="primary-nav" aria-label="เมนูหลัก">
+        <a class="nav-link active" href="#projects">โครงการ</a>
+        <a class="nav-link" href="#dashboard">ภาพรวม</a>
+        <a class="nav-link" href="#market">ผู้ชนะและสัดส่วน</a>
+      </nav>
+      <span class="local-status"><span class="local-dot"></span>ข้อมูลในเครื่อง</span>
+    </header>
 
     <main class="main" id="dashboard">
       <header class="topbar">
-        <div class="breadcrumb">WORKSPACE <span>/</span> DASHBOARD</div>
+        <div class="breadcrumb">โครงการจัดซื้อจัดจ้าง <span>/</span> ข้อมูล DGA</div>
         <div class="top-actions">
           <span id="lastUpdated" class="updated">ยังไม่มีข้อมูล</span>
           <button class="button button-outline" id="importButton">นำเข้า CSV</button>
@@ -34,11 +32,11 @@
       <div class="content">
         <div class="heading-row">
           <div>
-            <div class="eyebrow">PUBLIC PROCUREMENT OVERVIEW</div>
-            <h1>ติดตามงานก่อสร้างภาครัฐ</h1>
-            <p class="subtitle">ค้นหาโครงการตามจังหวัดของหน่วยงานจัดซื้อ พื้นที่ก่อสร้างจริงอาจอยู่คนละจังหวัด</p>
+            <div class="eyebrow">PROJECT EXPLORER</div>
+            <h1>ค้นหาโครงการที่คุณสนใจ</h1>
+            <p class="subtitle">ดูข้อมูลโครงการ วงเงิน และผู้ชนะในที่เดียว</p>
           </div>
-          <div class="heading-icon" aria-hidden="true">⌁</div>
+          <div class="data-label">DGA <span>EGP-CONTRACT</span></div>
         </div>
 
         <section class="notice" id="notice" role="status">
@@ -81,9 +79,10 @@
 
         <div class="lower-grid">
           <section class="panel projects-panel" id="projects">
-            <div class="section-header"><div><span class="section-kicker">PROJECT LIST</span><h2>รายการโครงการ <span id="tableCount" class="count-pill">0</span></h2></div><span class="table-hint">คลิกรายการเพื่อดูรายละเอียด</span></div>
-            <div class="table-wrap"><table><thead><tr><th>โครงการ</th><th>จังหวัดหน่วยจัดซื้อ / พื้นที่งาน</th><th>วงเงินงบประมาณ</th><th>สถานะ</th><th>ประกาศ</th></tr></thead><tbody id="projectRows"></tbody></table></div>
-            <div id="emptyState" class="empty-state" hidden><div class="empty-icon">▤</div><strong>ยังไม่พบโครงการในข้อมูลที่นำเข้า</strong><span id="emptyExplanation">ลองเปลี่ยนตัวกรอง หรือเพิ่มข้อมูลโครงการ</span></div>
+            <div class="section-header"><div><span class="section-kicker">ALL PROJECTS</span><h2>รายการโครงการ <span id="tableCount" class="count-pill">0</span></h2></div><span class="table-hint">เรียงตามวันที่ประกาศล่าสุดในข้อมูลที่เก็บ</span></div>
+            <p class="local-review-help">✓ สนใจ · × ไม่สนใจ · บุ๊กมาร์กเพื่อติดตาม — บันทึกเฉพาะเบราว์เซอร์นี้ ไม่ใช่ผลอนุมัติของบริษัท</p>
+            <div id="projectRows" class="project-cards" aria-label="รายการโครงการ"></div>
+            <div id="emptyState" class="empty-state" hidden><div class="empty-icon">▤</div><strong>ยังไม่มีโครงการที่ผ่านการเลือกฟิลด์เพื่อแสดง</strong><span id="emptyExplanation">ข้อมูลดิบจาก DGA เก็บแยกไว้ในฐานใหม่ก่อน</span></div>
             <div class="list-footer"><span id="visibleCount">—</span><div class="page-controls"><button class="button button-outline" id="previousPage" type="button" aria-label="หน้าก่อน">‹</button><label for="projectPage">หน้า</label><input id="projectPage" type="number" min="1" value="1" aria-label="เลขหน้ารายการโครงการ"><span id="pageTotal">/ 1</span><button class="button button-outline" id="goToPage" type="button">ไป</button><button class="button button-outline" id="nextPage" type="button" aria-label="หน้าถัดไป">›</button></div></div>
           </section>
 

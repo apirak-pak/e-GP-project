@@ -1,0 +1,39 @@
+{
+  "test_date_bangkok": "2026-10-29",
+  "environment": "GitHub-hosted Ubuntu runner; clean Chromium; no copied user session",
+  "requirement": "No local collector and no recurring human verification",
+  "diagnostic_runs": [
+    {
+      "url": "https://github.com/apirak-pak/e-GP-project/actions/runs/40780144799",
+      "finding": "Announcement module 594 was still pending after a 45-second form wait; CSV also returned verification_required"
+    },
+    {
+      "url": "https://github.com/apirak-pak/e-GP-project/actions/runs/40780576618",
+      "finding": "Announcement UI loaded; advanced-search modal caused ambiguous Search locator; probe URL subsequently corrected"
+    }
+  ],
+  "confirmed_run": {
+    "url": "https://github.com/apirak-pak/e-GP-project/actions/runs/40781022782",
+    "scope": {"fiscal_year": 2569, "province_code": "500000", "method_id": "16", "type_id": "02", "page": 1},
+    "direct_api": {"http_status": 200, "outcome": "verification_required", "data_received": false},
+    "csv_export": {"http_status": 200, "outcome": "verification_required", "exact_project_query": "69109071515", "data_received": false},
+    "browser": {
+      "page_http_status": 200,
+      "form_visible": true,
+      "document_ready_state": "complete",
+      "verification_widget_present": true,
+      "native_verification_completed_within_observation_window": false,
+      "bootstrap_attempted": false,
+      "session_header_observed": false,
+      "data_received": false,
+      "outcome": "verification_required"
+    }
+  },
+  "public_source_assets": [
+    {"url": "https://process5.gprocurement.go.th/egp-agpc01-web/main.121d82f5c6d6e6bb.js", "sha256": "5829eece1c368e5f8b5b626c4de673c623cb948f92defd7d6cd2ec4bb8ca82cf"},
+    {"url": "https://process5.gprocurement.go.th/egp-aann09-web/remoteEntry.js", "sha256": "03da99036219b67db3e5cb10220c7b303ad44ae8d29c1ca6ba7696b95747b6dc"},
+    {"url": "https://process5.gprocurement.go.th/egp-aann09-web/594.f63b663c79b5f1f4.js", "sha256": "0f416e92ee88d6c3efe37e9a4e19fb7885ede65dac0e6225e94dc7f77b6b2494"}
+  ],
+  "validation": {"python_tests_passed": 14, "javascript_tests_passed": 8},
+  "production_ready": false
+}

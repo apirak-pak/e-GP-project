@@ -26,6 +26,56 @@ const safe = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({"&":
 const statusClass = (status) => ({"ประกาศใหม่":"status-new","ระหว่างประมูล":"status-bidding","ประกาศผู้ชนะ":"status-won","ทำสัญญาแล้ว":"status-won"})[status] || "status-other";
 const workArea = (row) => row.province && row.province !== "ไม่ระบุพื้นที่โครงการ" ? row.province : "ยังระบุไม่ได้";
 const agencyArea = (row) => row.agency_province || "ไม่ระบุจังหวัดหน่วยจัดซื้อ";
+const REVIEW_KEY = "egp-radar.project-marks.v1";
+let projectMarks = {};
+try {
+  const stored = JSON.parse(localStorage.getItem(REVIEW_KEY) || "{}");
+  if (stored && typeof stored === "object" && !Array.isArray(stored)) projectMarks = stored;
+} catch { /* Cards remain usable when local storage is unavailable. */ }
+function projectMark(id) {
+  const value = Object.hasOwn(projectMarks,id) ? projectMarks[id] : null;
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+const cardIcons = {
+  interested: '<path d="m5 12 4 4L19 6"/>',
+  skip: '<path d="m6 6 12 12M18 6 6 18"/>',
+  saved: '<path d="M6 4h12v17l-6-4-6 4z"/>',
+  link: '<path d="m10 13 4-4m-6 7-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 1 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/>',
+};
+const cardIcon = name => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${cardIcons[name]}</svg>`;
+
+function projectTimeline(row) {
+  const hasWinner = Boolean(row.winner && ["ประกาศผู้ชนะ", "ทำสัญญาแล้ว"].includes(row.status));
+  const hasContract = row.status === "ทำสัญญาแล้ว";
+  const events = [
+    {label:"วันที่ประกาศ", value:row.announced_at ? thaiDate(row.announced_at) : "ยังไม่มีข้อมูล", known:Boolean(row.announced_at)},
+    {label:"ยื่นข้อเสนอ", value:"ยังไม่มีข้อมูล", known:false},
+    {label:"พิจารณาผล", value:"ยังไม่มีข้อมูล", known:false},
+    {label:"ผู้ชนะ", value:hasWinner ? "มีข้อมูลผู้ชนะ" : "ยังไม่มีข้อมูล", known:hasWinner},
+    {label:"สัญญา", value:hasContract ? "มีข้อมูลสัญญา" : "ยังไม่มีข้อมูล", known:hasContract},
+  ];
+  return `<ol class="project-timeline" aria-label="ข้อมูลตามขั้นตอนโครงการ">${events.map(event=>`<li class="${event.known ? 'known' : 'unknown'}"><span class="timeline-dot" aria-hidden="true">${event.known ? '✓' : ''}</span><span class="timeline-label">${event.label}</span><span class="timeline-value">${safe(event.value)}</span></li>`).join('')}</ol>`;
+}
+
+function renderProjectCards(rows) {
+  $("projectRows").innerHTML = rows.map((row,index)=>{
+    const mark = projectMark(row.project_id);
+    const actions = [
+      ['interested','ทำเครื่องหมายสนใจ',mark.review === 'interested'],
+      ['skip','ทำเครื่องหมายไม่สนใจ',mark.review === 'skip'],
+      ['saved','ติดตามบนเบราว์เซอร์นี้',Boolean(mark.saved)],
+      ['link','คัดลอกลิงก์ค้นหาโครงการบนเครื่องนี้',false],
+    ];
+    const info = (label,value,missing=false) => `<div class="card-fact"><dt>${label}</dt><dd${missing ? ' class="missing-value"' : ''}>${safe(value)}</dd></div>`;
+    return `<article class="project-card" data-index="${index}" aria-labelledby="project-title-${index}">
+      <div class="project-card-bar"><div class="card-identity"><span class="status ${statusClass(row.status)}">${safe(row.status)}</span><span class="card-project-id">เลขที่โครงการ <strong>${safe(row.project_id)}</strong></span>${row.is_demo ? '<span class="demo-label">ข้อมูลตัวอย่าง</span>' : ''}</div><div class="card-actions">${actions.map(([action,label,active])=>`<button type="button" class="card-action action-${action}${active ? ' is-active' : ''}" data-action="${action}" aria-label="${label}" title="${label}"${action !== 'link' ? ` aria-pressed="${Boolean(active)}"` : ''}>${cardIcon(action)}</button>`).join('')}</div></div>
+      <div class="project-card-body"><h3 id="project-title-${index}"><button type="button" class="project-title-button" data-action="details">${safe(row.title)}</button></h3>
+      <dl class="card-facts">${info('หน่วยงาน',row.agency || 'ยังไม่มีข้อมูล')}${info('ประเภทงาน',row.project_type || 'ยังไม่มีข้อมูล')}${info('จังหวัดหน่วยจัดซื้อ',agencyArea(row))}${info('พื้นที่โครงการ',workArea(row))}${info('เกณฑ์พิจารณา','ไม่มีข้อมูลในชุดที่เก็บ',true)}${info('ผลงานขั้นต่ำ','ไม่มีข้อมูลในชุดที่เก็บ',true)}</dl>
+      ${projectTimeline(row)}
+      <div class="card-price-row"><div><span>งบประมาณ</span><strong>${safe(money(row.budget))}</strong></div><div><span>ราคากลาง</span><strong>${safe(money(row.reference_price))}</strong></div><div><span>ราคาที่ชนะ</span><strong>${safe(money(row.winning_price))}</strong></div><button type="button" class="card-details-button" data-action="details">ดูรายละเอียด <span aria-hidden="true">›</span></button></div>
+      </div></article>`;
+  }).join('');
+}
 
 function notify(message, error = false) {
   const node = $("toast");
@@ -98,15 +148,7 @@ function selectedFilters() {
 }
 
 function renderProjects(rows, pagination) {
-  const tbody = $("projectRows");
-  tbody.innerHTML = rows.map((row, index) => `
-    <tr data-index="${index}" tabindex="0" aria-label="ดูรายละเอียด ${safe(row.title)}">
-      <td><span class="project-name">${safe(row.title)}</span><span class="project-id ${row.is_demo ? "demo" : ""}">${row.is_demo ? "ข้อมูลตัวอย่าง · " : ""}${safe(row.project_id)}</span></td>
-      <td>${safe(agencyArea(row))}<span class="cell-sub">พื้นที่งาน: ${safe(workArea(row))}${row.province && row.province !== "ไม่ระบุพื้นที่โครงการ" && row.agency_province && row.province !== row.agency_province ? " (ต่างจังหวัด)" : ""}</span><span class="cell-sub">ประเภท: ${safe(row.project_type || "ไม่ระบุ")}</span></td>
-      <td class="money">${safe(shortMoney(row.budget))}</td>
-      <td><span class="status ${statusClass(row.status)}">${safe(row.status)}</span></td>
-      <td>${safe(thaiDate(row.announced_at))}</td>
-    </tr>`).join("");
+  renderProjectCards(rows);
   $("emptyState").hidden = rows.length !== 0;
   const { total, offset, page_size } = pagination;
   projectPageSize = page_size;
@@ -122,7 +164,7 @@ function renderProjects(rows, pagination) {
   $("goToPage").disabled = total === 0;
   $("emptyExplanation").textContent = selectedProvinces().length
     ? "ยังไม่มีรายการที่ตรงเงื่อนไขในฐานข้อมูล ไม่ได้หมายความว่าพื้นที่เหล่านี้ไม่มีโครงการจริง"
-    : "ลองเปลี่ยนตัวกรอง หรือเพิ่มข้อมูลโครงการ";
+    : "ข้อมูล DGA ดิบเก็บไว้เพื่อเลือกฟิลด์ก่อน ยังไม่แปลงเป็นการ์ดโครงการ";
 }
 
 function renderMarket(data) {
@@ -161,12 +203,14 @@ function render(data) {
   renderMarket(data);
   const demoCount = data.meta.demo_count;
   const realCount = data.meta.total_in_database - demoCount;
-  $("notice").querySelector("strong").textContent = data.meta.api_count ? `มีข้อมูลจาก API ใน ${data.meta.covered_province_count} จังหวัด` : demoCount ? "ข้อมูลตัวอย่างอยู่ในระบบ" : "ต้นแบบบนเครื่องของคุณ";
+  $("notice").querySelector("strong").textContent = data.meta.raw_mode ? "กำลังตรวจข้อมูลดิบจาก DGA" : data.meta.api_count ? `มีข้อมูลจาก API ใน ${data.meta.covered_province_count} จังหวัด` : demoCount ? "ข้อมูลตัวอย่างอยู่ในระบบ" : "ต้นแบบบนเครื่องของคุณ";
   $("notice").querySelector("span").textContent = data.meta.api_count
-    ? `นำเข้า EGP-CONTRACT แล้ว ${data.meta.api_count.toLocaleString("th-TH")} รายการ · ${data.meta.unknown_work_province_count.toLocaleString("th-TH")} รายการยังระบุพื้นที่ก่อสร้างไม่ได้ แต่กรองด้วยจังหวัดหน่วยจัดซื้อได้ · เป็นข้อมูลขั้นทำสัญญาและยังไม่ครอบคลุมทุกผลค้นหา${demoCount ? ` · มีข้อมูลจำลองอีก ${demoCount} รายการ` : ""}`
-    : demoCount ? `มีข้อมูลจำลอง ${demoCount} รายการในฐานข้อมูล · ตัวเลขเหล่านี้ไม่ใช่ผลจัดซื้อจัดจ้างจริง` : realCount ? "ข้อมูลปัจจุบันมาจากรายการที่บันทึกหรือนำเข้าเอง" : "ยังไม่มีโครงการในฐานข้อมูล โหลดตัวอย่างเพื่อทดลองหน้าจอได้";
-  $("sampleButton").hidden = demoCount > 0 || realCount > 0;
+    ? `ข้อมูลโครงการและสัญญา ${data.meta.api_count.toLocaleString("th-TH")} รายการที่เก็บไว้ · ยังไม่ครบทุกผลค้นหา · วันยื่นข้อเสนอและเงื่อนไขเข้าร่วมยังไม่มีในชุดนี้${demoCount ? ` · มีข้อมูลจำลองอีก ${demoCount} รายการ` : ""}`
+    : data.meta.raw_mode ? `เก็บคำตอบ API ${data.meta.raw_captures.toLocaleString("th-TH")} ชุด รวม ${data.meta.raw_projects.toLocaleString("th-TH")} รายการดิบในฐานใหม่ · ยังไม่เลือกฟิลด์เพื่อแสดงบนการ์ด` : demoCount ? `มีข้อมูลจำลอง ${demoCount} รายการในฐานข้อมูล · ตัวเลขเหล่านี้ไม่ใช่ผลจัดซื้อจัดจ้างจริง` : realCount ? "ข้อมูลปัจจุบันมาจากรายการที่บันทึกหรือนำเข้าเอง" : "ฐานแดชบอร์ดยังไม่มีโครงการ ข้อมูล DGA ดิบจะยังไม่แสดงจนกว่าจะตรวจและเลือกฟิลด์";
+  $("sampleButton").hidden = data.meta.raw_mode || demoCount > 0 || realCount > 0;
   $("clearSampleButton").hidden = demoCount === 0;
+  $("addButton").hidden = data.meta.raw_mode;
+  $("importButton").hidden = data.meta.raw_mode;
 }
 
 async function refresh(page = 1, applyForm = false) {
@@ -207,7 +251,7 @@ function showDetails(row) {
     ["ราคาที่ชนะ", money(row.winning_price)], ["ผู้ชนะ", row.winner],
   ];
   const url = row.source_url && /^https?:\/\//i.test(row.source_url) ? row.source_url : "";
-  $("detailBody").innerHTML = `${row.is_demo ? "<p>ข้อมูลตัวอย่างเพื่อทดสอบหน้าจอ ไม่ใช่ประกาศจริง</p>" : ""}<p class="location-remark">${safe(locationRemark)}</p><div class="detail-grid">${fields.map(([label, value]) => `<div class="detail-item"><small>${safe(label)}</small><strong>${safe(value || "—")}</strong></div>`).join("")}</div>${url ? `<a class="detail-link" href="${safe(url)}" target="_blank" rel="noopener noreferrer">เปิดประกาศต้นทาง ↗</a>` : "<p>ยังไม่มีลิงก์ประกาศต้นทาง</p>"}`;
+  $("detailBody").innerHTML = `${row.is_demo ? "<p>ข้อมูลตัวอย่างเพื่อทดสอบหน้าจอ ไม่ใช่ประกาศจริง</p>" : ""}<div class="detail-status"><span class="status ${statusClass(row.status)}">${safe(row.status)}</span><span>เลขที่โครงการ ${safe(row.project_id)}</span></div>${projectTimeline(row)}<p class="location-remark">${safe(locationRemark)}</p><div class="detail-grid">${fields.map(([label, value]) => `<div class="detail-item"><small>${safe(label)}</small><strong>${safe(value || "—")}</strong></div>`).join("")}</div><p class="detail-availability">กำหนดยื่นข้อเสนอ เกณฑ์พิจารณา และผลงานขั้นต่ำ: ยังไม่มีในชุดข้อมูลที่เก็บ ไม่ใช้สถานะนี้ยืนยันว่าเปิดรับประมูลอยู่</p>${url ? `<a class="detail-link" href="${safe(url)}" target="_blank" rel="noopener noreferrer">เปิดประกาศต้นทาง ↗</a>` : "<p>ยังไม่มีลิงก์ประกาศต้นทาง</p>"}`;
   $("detailDialog").showModal();
 }
 
@@ -299,15 +343,32 @@ $("winnerNext").addEventListener("click", () => showWinner(selectedWinner, winne
 $("addButton").addEventListener("click", () => $("projectDialog").showModal());
 $("importButton").addEventListener("click", () => $("importDialog").showModal());
 document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => $(button.dataset.close).close()));
-$("projectRows").addEventListener("click", (event) => {
-  const row = event.target.closest("tr[data-index]");
-  if (row) showDetails(projects[Number(row.dataset.index)]);
-});
-$("projectRows").addEventListener("keydown", (event) => {
-  if (event.key === "Enter" || event.key === " ") {
-    const row = event.target.closest("tr[data-index]");
-    if (row) { event.preventDefault(); showDetails(projects[Number(row.dataset.index)]); }
+$("projectRows").addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-action]");
+  const card = button?.closest(".project-card[data-index]");
+  if (!card) return;
+  const row = projects[Number(card.dataset.index)];
+  const action = button.dataset.action;
+  if (action === "details") { showDetails(row); return; }
+  if (action === "link") {
+    const url = new URL(location.origin); url.searchParams.set('q',row.project_id);
+    try { await navigator.clipboard.writeText(url.href); notify('คัดลอกลิงก์ค้นหาโครงการบนเครื่องนี้แล้ว'); }
+    catch { notify('คัดลอกไม่ได้ กรุณาใช้เลขโครงการ ' + row.project_id,true); }
+    return;
   }
+  if (!["saved","interested","skip"].includes(action)) return;
+  const previous = projectMark(row.project_id);
+  const mark = {review:previous.review || '',saved:Boolean(previous.saved)};
+  if (action === 'saved') mark.saved = !mark.saved;
+  else mark.review = mark.review === action ? '' : action;
+  const next = {...projectMarks,[row.project_id]:mark};
+  try { localStorage.setItem(REVIEW_KEY,JSON.stringify(next)); }
+  catch { notify('บันทึกไม่ได้ เบราว์เซอร์ไม่อนุญาตพื้นที่จัดเก็บ',true); return; }
+  projectMarks = next;
+  const index = card.dataset.index;
+  renderProjectCards(projects);
+  document.querySelector(`.project-card[data-index="${index}"] [data-action="${action}"]`)?.focus({preventScroll:true});
+  notify('บันทึกเครื่องหมายบนเบราว์เซอร์นี้แล้ว');
 });
 
 $("projectForm").addEventListener("submit", async (event) => {
@@ -347,7 +408,7 @@ $("clearSampleButton").addEventListener("click", async () => {
 });
 
 function updateNavigation() {
-  const section = location.hash || "#dashboard";
+  const section = location.hash || "#projects";
   document.querySelectorAll(".nav-link").forEach((link) => {
     const active = link.getAttribute("href") === section;
     link.classList.toggle("active", active);
@@ -357,5 +418,7 @@ function updateNavigation() {
 }
 window.addEventListener("hashchange", updateNavigation);
 updateNavigation();
+const initialSearch = new URLSearchParams(location.search).get('q');
+if (initialSearch) $("q").value = initialSearch;
 activeFilters = selectedFilters();
 refresh();

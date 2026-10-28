@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "e-GP Live API Connector",
+  "version": "0.3.0",
+  "description": "รับ JSON จาก API e-GP ใน Edge และเก็บในฐานข้อมูลใหม่บนเครื่องนี้",
+  "permissions": ["storage"],
+  "host_permissions": ["https://process5.gprocurement.go.th/*", "http://127.0.0.1:8502/*"],
+  "background": {"service_worker": "background.js"},
+  "content_scripts": [
+    {"matches": ["https://process5.gprocurement.go.th/egp-agpc01-web/*"], "js": ["egp-main.js"], "run_at": "document_start", "world": "MAIN"},
+    {"matches": ["https://process5.gprocurement.go.th/egp-agpc01-web/*", "http://127.0.0.1:8502/*"], "js": ["content.js"], "run_at": "document_start"}
+  ]
+}

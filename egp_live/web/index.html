@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>e-GP Live | คลังประกาศจัดซื้อจัดจ้าง</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-icon">e</span><div><strong>e-GP Live</strong><small>คลังประกาศในเครื่อง</small></div></div>
+      <nav aria-label="เมนู"><a class="selected" href="#projects">โครงการ</a><a href="#coverage">ความคืบหน้าการดึง</a><a href="#guide">วิธีใช้งาน</a></nav>
+      <div class="sidebar-foot"><span class="dot"></span> ฐานข้อมูลแยกจาก DGA<br><small>ข้อมูลอยู่บนเครื่องนี้</small></div>
+    </aside>
+    <main>
+      <header class="topbar"><span>e-GP / ประกาศจัดซื้อจัดจ้าง</span><a href="https://process5.gprocurement.go.th/egp-agpc01-web/announcement?keywordSearch=&amp;advancedSearch=true" target="_blank" rel="noopener noreferrer">เปิด e-GP ↗</a></header>
+      <div class="content">
+        <div class="intro"><div><span class="eyebrow">LIVE ANNOUNCEMENT DATABASE</span><h1>ติดตามประกาศจาก e-GP</h1><p>เริ่มฐานใหม่จากคำตอบ API โดยตรง เก็บ JSON ดิบทุกหน้าที่รับได้ และแสดงเฉพาะโครงการที่ดึงเข้ามาแล้ว</p></div><div class="source-tag">แหล่งข้อมูล<br><strong>e-GP กรมบัญชีกลาง</strong></div></div>
+
+        <section class="stats" aria-label="สรุปข้อมูล"><div><span>โครงการในฐานใหม่</span><strong id="totalProjects">0</strong><small>ไม่รวมฐาน DGA เดิม</small></div><div><span>หน้า API ที่บันทึก</span><strong id="totalPages">0</strong><small>บันทึกซ้ำยังเก็บเป็นประวัติ</small></div><div><span>ผลตามตัวกรอง</span><strong id="filteredCount">0</strong><small>ตามปี จังหวัด และสถานะ</small></div></section>
+
+        <section class="panel sync-panel" id="sync"><div class="panel-heading"><div><span class="eyebrow">CONNECT TO E-GP</span><h2>ดึงข้อมูลผ่าน Edge</h2></div><span class="badge">e-bidding · จ้างก่อสร้าง</span></div>
+          <p class="muted">เปิดหน้า e-GP ใน Edge และค้นหาให้สำเร็จหนึ่งครั้งเพื่อเริ่มเซสชัน จากนั้นตัวเลือกด้านล่างจะกำหนดคำขอ API แยกตามจังหวัด; token และ cookie ไม่ถูกส่งเข้าฐานข้อมูลนี้</p>
+          <div class="sync-controls"><label>รูปแบบการดึง<select id="syncMode"><option value="manual">Manual · ระบุหน้าเอง</option><option value="auto">อัตโนมัติ · ต่อจากหน้าที่ขาด</option></select></label><label>ปีงบประมาณ<select id="syncYear"><option value="2569">2569</option><option value="2570">2570</option></select></label><fieldset><legend>จังหวัดหน่วยจัดซื้อ</legend><label><input type="checkbox" name="syncProvince" value="500000" checked> เชียงใหม่</label><label><input type="checkbox" name="syncProvince" value="570000" checked> เชียงราย</label><label><input type="checkbox" name="syncProvince" value="560000" checked> พะเยา</label></fieldset><label class="manual-control">เริ่มที่หน้า<input id="startPage" type="number" min="1" max="1000" value="1"></label><label class="manual-control">จำนวนหน้าต่อจังหวัด<select id="maxPages"><option value="1">1 หน้า · ทดลอง</option><option value="3">3 หน้า</option><option value="10">10 หน้า</option></select></label></div>
+          <p id="autoHint" class="note" hidden>อัตโนมัติจะเริ่มจากหน้าถัดไปที่ยังขาดของแต่ละจังหวัด ไล่ทีละหน้าจนเจอหน้าว่างหรือถึงหน้า 1000 จังหวัดที่เคยเจอหน้าว่างแล้วจะข้าม รอบใหม่เริ่มต่อได้จากข้อมูลที่บันทึกไว้</p>
+          <div class="sync-actions"><button id="connect" class="secondary">เชื่อมตัวรับ API</button><button id="syncButton" class="primary">ดึง API และบันทึก</button><button id="stopButton" class="secondary">หยุดดึง</button><span id="syncStatus" role="status">กำลังตรวจตัวเชื่อม…</span></div>
+          <p class="note">แต่ละหน้าที่สำเร็จจะบันทึกทันที หาก e-GP ขอให้ยืนยันใหม่หรือจำกัดคำขอ ระบบจะหยุดโดยไม่ลองฝืนซ้ำ ข้อมูลที่รับก่อนหน้ายังอยู่ การดึงอัตโนมัติต้องเปิดแท็บ e-GP และ Edge ค้างไว้</p>
+        </section>
+
+        <section class="panel" id="coverage"><div class="panel-heading"><div><span class="eyebrow">DATA COVERAGE</span><h2>หน้าที่บันทึกแล้ว</h2></div></div><div id="coverageRows" class="coverage-grid"></div><p class="note">ข้อมูล e-GP อาจเปลี่ยนระหว่างการไล่หน้า ควรตรวจจำนวนและรายการกับเว็บต้นทาง หากต้องการดึงหน้าเก่าซ้ำเพื่ออัปเดต ให้ใช้ Manual</p></section>
+
+        <section class="panel" id="projects"><div class="panel-heading"><div><span class="eyebrow">PROJECT EXPLORER</span><h2>รายการโครงการ</h2></div><span class="badge">ข้อมูล API ที่เก็บในเครื่อง</span></div>
+          <form id="filters" class="filters"><label>ปี<select id="filterYear"><option value="2569">2569</option><option value="2570">2570</option></select></label><label>จังหวัด<select id="filterProvince"><option value="">ทั้ง 3 จังหวัด</option><option>เชียงใหม่</option><option>เชียงราย</option><option>พะเยา</option></select></label><label>สถานะ<select id="filterStatus"><option value="">ทุกสถานะ</option></select></label><label class="search">ค้นหา<input id="filterQuery" type="search" placeholder="ชื่อโครงการ หน่วยงาน หรือเลขโครงการ"></label><button class="secondary" type="submit">แสดงผล</button></form>
+          <div id="projectRows" class="project-rows"></div><div id="empty" class="empty">ยังไม่มีข้อมูล e-GP ในฐานใหม่นี้ — เริ่มจากดึง 1 หน้าต่อจังหวัด</div><div class="pager"><button id="prev" class="secondary">← ก่อนหน้า</button><span id="pageLabel">หน้า 1</span><button id="next" class="secondary">ถัดไป →</button></div>
+        </section>
+        <section class="guide" id="guide"><h2>เริ่มใช้งาน</h2><ol><li>เปิดโปรแกรมนี้ใน Edge และติดตั้งหรือโหลดส่วนขยายจากโฟลเดอร์ <code>egp_live/extension</code> ใหม่หลังอัปเดต</li><li>เปิด e-GP ใน Edge แท็บเดียวกัน ผ่าน Cloudflare แล้วกดค้นหาหนึ่งครั้ง</li><li>กลับมาหน้านี้ กดเชื่อมตัวรับ API เลือกปีและจังหวัด</li><li>เลือก Manual เพื่อระบุหน้าเอง หรืออัตโนมัติเพื่อดึงต่อเนื่องจากหน้าที่ขาด กดหยุดได้ทุกเมื่อ</li></ol></section>
+      </div>
+    </main>
+  </div>
+  <dialog id="rawDialog"><div class="dialog-head"><div><small>JSON ดิบจาก API</small><h2 id="rawTitle">โครงการ</h2></div><button id="closeRaw" class="secondary">ปิด</button></div><pre id="rawContent"></pre></dialog>
+</body>
+</html>

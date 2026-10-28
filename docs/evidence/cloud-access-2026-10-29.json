@@ -1,0 +1,29 @@
+{
+  "test_date_bangkok": "2026-10-29",
+  "environment": "GitHub-hosted Ubuntu runner; clean Chromium; no local session",
+  "scope": {"fiscal_year": 2569, "province_code": "500000", "method_id": "16", "type_id": "02", "page": 1},
+  "runs": [
+    {
+      "url": "https://github.com/apirak-pak/e-GP-project/actions/runs/40778251133",
+      "direct": {"http_status": 200, "outcome": "verification_required", "data_received": false},
+      "browser": {"page_http_status": 200, "outcome": "search_ui_unavailable", "data_received": false}
+    },
+    {
+      "url": "https://github.com/apirak-pak/e-GP-project/actions/runs/40778693462",
+      "direct": {"http_status": 200, "outcome": "verification_required", "data_received": false},
+      "browser": {
+        "page_http_status": 200,
+        "outcome": "search_ui_unavailable",
+        "bootstrap_attempted": false,
+        "session_header_observed": false,
+        "data_received": false,
+        "failed_assets": [],
+        "page_error_types": [],
+        "ui": {"title": "eGP All Web", "ready_state": "interactive", "body_text_length": 0, "script_count": 5}
+      }
+    }
+  ],
+  "validation": {"python_tests_passed": 10, "javascript_tests_passed": 8},
+  "production_ready": false,
+  "limitation": "Direct API requires verification. Browser UI initialization remains inconclusive. No project data was received; other hosting environments and CSV export were not tested."
+}

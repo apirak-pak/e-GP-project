@@ -9,3 +9,9 @@ __pycache__/
 .DS_Store
 Thumbs.db
 *.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+artifacts/
+.venv-probe/

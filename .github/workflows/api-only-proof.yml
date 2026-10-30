@@ -1,0 +1,31 @@
+name: API-only access proof
+
+on:
+  push:
+    branches: [codex/cloud-api-proof-20261031]
+    paths: ['collector_probe/api_only.py', 'tests/test_api_only_probe.py', '.github/workflows/api-only-proof.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  api-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Check response classification
+        run: python -m unittest discover -s tests -p test_api_only_probe.py -v
+      - name: Read known public project without browser session
+        run: python -m collector_probe.api_only
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: egp-api-only-proof
+          path: artifacts/cloud-api-proof/report.json
+          retention-days: 7
+          if-no-files-found: warn
